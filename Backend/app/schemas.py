@@ -70,3 +70,23 @@ class SimulationResponse(BaseModel):
     status: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================
+# RELIEF SCHEMAS
+# ============================================================
+
+class ReliefCreate(BaseModel):
+    disaster_id: int
+
+
+class ReliefResponse(BaseModel):
+    id: int
+    disaster_id: int
+    food_packets: int
+    water_liters: int
+    medical_kits: int
+    blankets: int
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
