@@ -3,9 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
 
-# ============================================================
-# DISASTER SCHEMAS
-# ============================================================
 
 class DisasterCreate(BaseModel):
     name: str
@@ -23,9 +20,6 @@ class DisasterUpdate(BaseModel):
     radius_km: float
 
 
-# ============================================================
-# WAREHOUSE SCHEMAS
-# ============================================================
 
 class WarehouseCreate(BaseModel):
     name: str
