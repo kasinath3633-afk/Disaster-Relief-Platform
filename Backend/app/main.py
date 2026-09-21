@@ -7,19 +7,20 @@ from app.database import engine, Base, get_db
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
 from app.models.population import PopulationPoint
-
 from app.models.user import User
-
 from app.models.simulation import SimulationResult
 from app.models.relief import ReliefRequirement
-
 from app.models.shelter import Shelter
+from app.models.resource import Resource
+
 from app.schemas import (
     DisasterCreate,
     DisasterUpdate,
+
     ShelterCreate,
     ShelterResponse,
     ShelterUpdate,
+
     WarehouseCreate,
     WarehouseUpdate,
 
@@ -27,10 +28,16 @@ from app.schemas import (
     UserUpdate,
 
     PopulationCreate,
+
     SimulationCreate,
     SimulationResponse,
+
     ReliefCreate,
-    ReliefResponse
+    ReliefResponse,
+
+    ResourceCreate,
+    ResourceUpdate,
+    ResourceResponse
 )
 
 
@@ -277,6 +284,138 @@ def delete_warehouse(
 
 
 # =========================================================
+# RESOURCE APIs
+# =========================================================
+
+@app.post(
+    "/resources",
+    response_model=ResourceResponse
+)
+def create_resource(
+    resource: ResourceCreate,
+    db: Session = Depends(get_db)
+):
+    warehouse = db.query(Warehouse).filter(
+        Warehouse.id == resource.warehouse_id
+    ).first()
+
+    if warehouse is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Warehouse not found"
+        )
+
+    new_resource = Resource(
+        warehouse_id=resource.warehouse_id,
+        name=resource.name,
+        quantity=resource.quantity,
+        unit=resource.unit
+    )
+
+    db.add(new_resource)
+    db.commit()
+    db.refresh(new_resource)
+
+    return new_resource
+
+
+@app.get(
+    "/resources",
+    response_model=list[ResourceResponse]
+)
+def get_resources(
+    db: Session = Depends(get_db)
+):
+    resources = db.query(Resource).all()
+
+    return resources
+
+
+@app.get(
+    "/resources/{resource_id}",
+    response_model=ResourceResponse
+)
+def get_resource(
+    resource_id: int,
+    db: Session = Depends(get_db)
+):
+    resource = db.query(Resource).filter(
+        Resource.id == resource_id
+    ).first()
+
+    if resource is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Resource not found"
+        )
+
+    return resource
+
+
+@app.put(
+    "/resources/{resource_id}",
+    response_model=ResourceResponse
+)
+def update_resource(
+    resource_id: int,
+    resource_data: ResourceUpdate,
+    db: Session = Depends(get_db)
+):
+    resource = db.query(Resource).filter(
+        Resource.id == resource_id
+    ).first()
+
+    if resource is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Resource not found"
+        )
+
+    warehouse = db.query(Warehouse).filter(
+        Warehouse.id == resource_data.warehouse_id
+    ).first()
+
+    if warehouse is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Warehouse not found"
+        )
+
+    resource.warehouse_id = resource_data.warehouse_id
+    resource.name = resource_data.name
+    resource.quantity = resource_data.quantity
+    resource.unit = resource_data.unit
+
+    db.commit()
+    db.refresh(resource)
+
+    return resource
+
+
+@app.delete("/resources/{resource_id}")
+def delete_resource(
+    resource_id: int,
+    db: Session = Depends(get_db)
+):
+    resource = db.query(Resource).filter(
+        Resource.id == resource_id
+    ).first()
+
+    if resource is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Resource not found"
+        )
+
+    db.delete(resource)
+    db.commit()
+
+    return {
+        "message": "Resource deleted successfully"
+    }
+
+
+# =========================================================
 # POPULATION APIs
 # =========================================================
 
@@ -311,8 +450,9 @@ def get_population(
 
 
 # =========================================================
-# User APIs
+# USER APIs
 # =========================================================
+
 @app.post("/users")
 def create_user(
     user: UserCreate,
@@ -322,7 +462,7 @@ def create_user(
         username=user.username,
         email=user.email,
         phone_number=user.phone_number,
-        password_hash=user.password,
+        password_hash=user.password
     )
 
     db.add(new_user)
@@ -331,6 +471,7 @@ def create_user(
 
     return new_user
 
+
 @app.get("/users")
 def get_users(
     db: Session = Depends(get_db)
@@ -338,48 +479,52 @@ def get_users(
     users = db.query(User).all()
 
     return users
+
+
 @app.get("/users/{user_id}")
 def get_user(
-        user_id: int,
-        db: Session = Depends(get_db)
-    ):
-        user = db.query(User).filter(
-            User.id == user_id
-        ).first()
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
 
-        if user is None:
-            raise HTTPException(
-                status_code=404,
-                detail="User not found"
-            )
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
 
-        return user
+    return user
+
 
 @app.put("/users/{user_id}")
 def update_user(
-        user_id: int,
-        user_data: UserUpdate,
-        db: Session = Depends(get_db)
-    ):
-        user = db.query(User).filter(
-            User.id == user_id
-        ).first()
+    user_id: int,
+    user_data: UserUpdate,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
 
-        if user is None:
-            raise HTTPException(
-                status_code=404,
-                detail="User not found"
-            )
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
 
-        user.username = user_data.username
-        user.email = user_data.email
-        user.phone_number = user_data.phone_number
-        user.role = user_data.role
+    user.username = user_data.username
+    user.email = user_data.email
+    user.phone_number = user_data.phone_number
+    user.role = user_data.role
 
-        db.commit()
-        db.refresh(user)
+    db.commit()
+    db.refresh(user)
 
-        return user
+    return user
+
 
 @app.delete("/users/{user_id}")
 def delete_user(
@@ -496,7 +641,16 @@ def get_simulation_results(
     ).all()
 
     return simulations
-@app.post("/shelters", response_model=ShelterResponse)
+
+
+# =========================================================
+# SHELTER APIs
+# =========================================================
+
+@app.post(
+    "/shelters",
+    response_model=ShelterResponse
+)
 def create_shelter(
     shelter: ShelterCreate,
     db: Session = Depends(get_db)
@@ -516,25 +670,44 @@ def create_shelter(
 
     return new_shelter
 
-@app.get("/shelters", response_model=list[ShelterResponse])
-def get_shelters(db: Session = Depends(get_db)):
+
+@app.get(
+    "/shelters",
+    response_model=list[ShelterResponse]
+)
+def get_shelters(
+    db: Session = Depends(get_db)
+):
     shelters = db.query(Shelter).all()
+
     return shelters
 
-@app.get("/shelters/{shelter_id}", response_model=ShelterResponse)
-def get_shelter(shelter_id: int, db: Session = Depends(get_db)):
-    if shelter is None:
-        return {"error": "Shelter not found"}
+
+@app.get(
+    "/shelters/{shelter_id}",
+    response_model=ShelterResponse
+)
+def get_shelter(
+    shelter_id: int,
+    db: Session = Depends(get_db)
+):
     shelter = db.query(Shelter).filter(
         Shelter.id == shelter_id
     ).first()
 
     if shelter is None:
-        return {"error": "Shelter not found"}
+        raise HTTPException(
+            status_code=404,
+            detail="Shelter not found"
+        )
 
     return shelter
 
-@app.put("/shelters/{shelter_id}", response_model=ShelterResponse)
+
+@app.put(
+    "/shelters/{shelter_id}",
+    response_model=ShelterResponse
+)
 def update_shelter(
     shelter_id: int,
     shelter: ShelterUpdate,
@@ -545,7 +718,10 @@ def update_shelter(
     ).first()
 
     if existing_shelter is None:
-        return {"error": "Shelter not found"}
+        raise HTTPException(
+            status_code=404,
+            detail="Shelter not found"
+        )
 
     existing_shelter.name = shelter.name
     existing_shelter.latitude = shelter.latitude
@@ -559,6 +735,7 @@ def update_shelter(
 
     return existing_shelter
 
+
 @app.delete("/shelters/{shelter_id}")
 def delete_shelter(
     shelter_id: int,
@@ -569,13 +746,17 @@ def delete_shelter(
     ).first()
 
     if shelter is None:
-        return {"error": "Shelter not found"}
+        raise HTTPException(
+            status_code=404,
+            detail="Shelter not found"
+        )
 
     db.delete(shelter)
     db.commit()
 
-    return {"message": "Shelter deleted successfully"}
-
+    return {
+        "message": "Shelter deleted successfully"
+    }
 
 
 # =========================================================
@@ -600,7 +781,6 @@ def estimate_relief(
             detail="Disaster not found"
         )
 
-    # Get latest simulation result
     simulation = db.query(
         SimulationResult
     ).filter(

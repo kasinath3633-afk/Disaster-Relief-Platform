@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -54,6 +52,7 @@ class PopulationCreate(BaseModel):
         ge=0
     )
 
+
 # ============================================================
 # USER SCHEMAS
 # ============================================================
@@ -63,23 +62,52 @@ class UserCreate(BaseModel):
     email: str
     phone_number: str
     password: str
-    role: str = Field(default="coordinator")
 
 
 class UserUpdate(BaseModel):
     username: str
     email: str
     phone_number: str
-    role: str = Field(default="coordinator")
+    role: str
+
+
+# ============================================================
+# SHELTER SCHEMAS
+# ============================================================
+
+class ShelterCreate(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int = Field(gt=0)
+    occupancy: int = Field(default=0, ge=0)
+    is_active: bool = True
+
+
+class ShelterUpdate(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int = Field(gt=0)
+    occupancy: int = Field(default=0, ge=0)
+    is_active: bool = True
+
+
+class ShelterResponse(BaseModel):
+    id: int
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int
+    occupancy: int
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============================================================
 # SIMULATION SCHEMAS
 # ============================================================
-
-
-class SchemaResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
 
 class SimulationCreate(BaseModel):
     disaster_id: int
@@ -117,50 +145,28 @@ class ReliefResponse(BaseModel):
 
 
 # ============================================================
-# RELIEF SCHEMAS
+# RESOURCE SCHEMAS
 # ============================================================
 
-class ReliefCreate(BaseModel):
-    disaster_id: int
+class ResourceCreate(BaseModel):
+    warehouse_id: int
+    name: str
+    quantity: int = Field(gt=0)
+    unit: str
 
 
-class ReliefResponse(BaseModel):
+class ResourceUpdate(BaseModel):
+    warehouse_id: int
+    name: str
+    quantity: int = Field(gt=0)
+    unit: str
+
+
+class ResourceResponse(BaseModel):
     id: int
-    disaster_id: int
-    food_packets: int
-    water_liters: int
-    medical_kits: int
-    blankets: int
-    status: str
+    warehouse_id: int
+    name: str
+    quantity: int
+    unit: str
 
     model_config = ConfigDict(from_attributes=True)
-
-class ShelterCreate(BaseModel):
-    name: str
-    latitude: float
-    longitude: float
-    capacity: int
-    occupancy: int = 0
-    is_active: bool = True
-
-class ShelterUpdate(BaseModel):
-    name: str
-    latitude: float
-    longitude: float
-    capacity: int
-    occupancy: int
-    is_active: bool
-
-class ShelterResponse(BaseModel):
-    id: int
-    name: str
-    latitude: float
-    longitude: float
-    capacity: int
-    occupancy: int
-    is_active: bool
-    created_at: datetime
-
-    model_config = {
-        "from_attributes": True
-    }
