@@ -7,14 +7,25 @@ from app.database import engine, Base, get_db
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
 from app.models.population import PopulationPoint
+
+from app.models.user import User
+
 from app.models.simulation import SimulationResult
 from app.models.relief import ReliefRequirement
 
+from app.models.shelter import Shelter
 from app.schemas import (
     DisasterCreate,
     DisasterUpdate,
+    ShelterCreate,
+    ShelterResponse,
+    ShelterUpdate,
     WarehouseCreate,
     WarehouseUpdate,
+
+    UserCreate,
+    UserUpdate,
+
     PopulationCreate,
     SimulationCreate,
     SimulationResponse,
@@ -300,6 +311,100 @@ def get_population(
 
 
 # =========================================================
+# User APIs
+# =========================================================
+@app.post("/users")
+def create_user(
+    user: UserCreate,
+    db: Session = Depends(get_db)
+):
+    new_user = User(
+        username=user.username,
+        email=user.email,
+        phone_number=user.phone_number,
+        password_hash=user.password,
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+
+@app.get("/users")
+def get_users(
+    db: Session = Depends(get_db)
+):
+    users = db.query(User).all()
+
+    return users
+@app.get("/users/{user_id}")
+def get_user(
+        user_id: int,
+        db: Session = Depends(get_db)
+    ):
+        user = db.query(User).filter(
+            User.id == user_id
+        ).first()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        return user
+
+@app.put("/users/{user_id}")
+def update_user(
+        user_id: int,
+        user_data: UserUpdate,
+        db: Session = Depends(get_db)
+    ):
+        user = db.query(User).filter(
+            User.id == user_id
+        ).first()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        user.username = user_data.username
+        user.email = user_data.email
+        user.phone_number = user_data.phone_number
+        user.role = user_data.role
+
+        db.commit()
+        db.refresh(user)
+
+        return user
+
+@app.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": "User deleted successfully"
+    }
+
+
+# =========================================================
 # SIMULATION APIs
 # =========================================================
 
@@ -391,97 +496,3 @@ def get_simulation_results(
     ).all()
 
     return simulations
-
-
-# =========================================================
-# RELIEF APIs
-# =========================================================
-
-@app.post(
-    "/relief/estimate/{disaster_id}",
-    response_model=ReliefResponse
-)
-def estimate_relief(
-    disaster_id: int,
-    db: Session = Depends(get_db)
-):
-    disaster = db.query(Disaster).filter(
-        Disaster.id == disaster_id
-    ).first()
-
-    if disaster is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Disaster not found"
-        )
-
-    # Get latest simulation result
-    simulation = db.query(
-        SimulationResult
-    ).filter(
-        SimulationResult.disaster_id == disaster_id
-    ).order_by(
-        SimulationResult.id.desc()
-    ).first()
-
-    if simulation is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Run simulation before estimating relief"
-        )
-
-    affected_population = simulation.affected_population
-
-    # Temporary relief estimation
-    food_packets = affected_population * 3
-
-    water_liters = affected_population * 5
-
-    medical_kits = max(
-        1,
-        affected_population // 20
-    )
-
-    blankets = affected_population
-
-    new_relief = ReliefRequirement(
-        disaster_id=disaster_id,
-        food_packets=food_packets,
-        water_liters=water_liters,
-        medical_kits=medical_kits,
-        blankets=blankets,
-        status="estimated"
-    )
-
-    db.add(new_relief)
-    db.commit()
-    db.refresh(new_relief)
-
-    return new_relief
-
-
-@app.get(
-    "/relief/{disaster_id}",
-    response_model=list[ReliefResponse]
-)
-def get_relief_requirements(
-    disaster_id: int,
-    db: Session = Depends(get_db)
-):
-    disaster = db.query(Disaster).filter(
-        Disaster.id == disaster_id
-    ).first()
-
-    if disaster is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Disaster not found"
-        )
-
-    relief_requirements = db.query(
-        ReliefRequirement
-    ).filter(
-        ReliefRequirement.disaster_id == disaster_id
-    ).all()
-
-    return relief_requirements

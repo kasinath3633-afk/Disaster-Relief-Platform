@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -52,10 +54,32 @@ class PopulationCreate(BaseModel):
         ge=0
     )
 
+# ============================================================
+# USER SCHEMAS
+# ============================================================
+
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    phone_number: str
+    password: str
+    role: str = Field(default="coordinator")
+
+
+class UserUpdate(BaseModel):
+    username: str
+    email: str
+    phone_number: str
+    role: str = Field(default="coordinator")
+
 
 # ============================================================
 # SIMULATION SCHEMAS
 # ============================================================
+
+
+class SchemaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
 class SimulationCreate(BaseModel):
     disaster_id: int
@@ -90,3 +114,53 @@ class ReliefResponse(BaseModel):
     status: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================
+# RELIEF SCHEMAS
+# ============================================================
+
+class ReliefCreate(BaseModel):
+    disaster_id: int
+
+
+class ReliefResponse(BaseModel):
+    id: int
+    disaster_id: int
+    food_packets: int
+    water_liters: int
+    medical_kits: int
+    blankets: int
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ShelterCreate(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int
+    occupancy: int = 0
+    is_active: bool = True
+
+class ShelterUpdate(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int
+    occupancy: int
+    is_active: bool
+
+class ShelterResponse(BaseModel):
+    id: int
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int
+    occupancy: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
