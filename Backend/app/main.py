@@ -496,3 +496,177 @@ def get_simulation_results(
     ).all()
 
     return simulations
+@app.post("/shelters", response_model=ShelterResponse)
+def create_shelter(
+    shelter: ShelterCreate,
+    db: Session = Depends(get_db)
+):
+    new_shelter = Shelter(
+        name=shelter.name,
+        latitude=shelter.latitude,
+        longitude=shelter.longitude,
+        capacity=shelter.capacity,
+        occupancy=shelter.occupancy,
+        is_active=shelter.is_active
+    )
+
+    db.add(new_shelter)
+    db.commit()
+    db.refresh(new_shelter)
+
+    return new_shelter
+
+@app.get("/shelters", response_model=list[ShelterResponse])
+def get_shelters(db: Session = Depends(get_db)):
+    shelters = db.query(Shelter).all()
+    return shelters
+
+@app.get("/shelters/{shelter_id}", response_model=ShelterResponse)
+def get_shelter(shelter_id: int, db: Session = Depends(get_db)):
+    if shelter is None:
+        return {"error": "Shelter not found"}
+    shelter = db.query(Shelter).filter(
+        Shelter.id == shelter_id
+    ).first()
+
+    if shelter is None:
+        return {"error": "Shelter not found"}
+
+    return shelter
+
+@app.put("/shelters/{shelter_id}", response_model=ShelterResponse)
+def update_shelter(
+    shelter_id: int,
+    shelter: ShelterUpdate,
+    db: Session = Depends(get_db)
+):
+    existing_shelter = db.query(Shelter).filter(
+        Shelter.id == shelter_id
+    ).first()
+
+    if existing_shelter is None:
+        return {"error": "Shelter not found"}
+
+    existing_shelter.name = shelter.name
+    existing_shelter.latitude = shelter.latitude
+    existing_shelter.longitude = shelter.longitude
+    existing_shelter.capacity = shelter.capacity
+    existing_shelter.occupancy = shelter.occupancy
+    existing_shelter.is_active = shelter.is_active
+
+    db.commit()
+    db.refresh(existing_shelter)
+
+    return existing_shelter
+
+@app.delete("/shelters/{shelter_id}")
+def delete_shelter(
+    shelter_id: int,
+    db: Session = Depends(get_db)
+):
+    shelter = db.query(Shelter).filter(
+        Shelter.id == shelter_id
+    ).first()
+
+    if shelter is None:
+        return {"error": "Shelter not found"}
+
+    db.delete(shelter)
+    db.commit()
+
+    return {"message": "Shelter deleted successfully"}
+
+
+
+# =========================================================
+# RELIEF APIs
+# =========================================================
+
+@app.post(
+    "/relief/estimate/{disaster_id}",
+    response_model=ReliefResponse
+)
+def estimate_relief(
+    disaster_id: int,
+    db: Session = Depends(get_db)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if disaster is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    # Get latest simulation result
+    simulation = db.query(
+        SimulationResult
+    ).filter(
+        SimulationResult.disaster_id == disaster_id
+    ).order_by(
+        SimulationResult.id.desc()
+    ).first()
+
+    if simulation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Run simulation before estimating relief"
+        )
+
+    affected_population = simulation.affected_population
+
+    # Temporary relief estimation
+    food_packets = affected_population * 3
+
+    water_liters = affected_population * 5
+
+    medical_kits = max(
+        1,
+        affected_population // 20
+    )
+
+    blankets = affected_population
+
+    new_relief = ReliefRequirement(
+        disaster_id=disaster_id,
+        food_packets=food_packets,
+        water_liters=water_liters,
+        medical_kits=medical_kits,
+        blankets=blankets,
+        status="estimated"
+    )
+
+    db.add(new_relief)
+    db.commit()
+    db.refresh(new_relief)
+
+    return new_relief
+
+
+@app.get(
+    "/relief/{disaster_id}",
+    response_model=list[ReliefResponse]
+)
+def get_relief_requirements(
+    disaster_id: int,
+    db: Session = Depends(get_db)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if disaster is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    relief_requirements = db.query(
+        ReliefRequirement
+    ).filter(
+        ReliefRequirement.disaster_id == disaster_id
+    ).all()
+
+    return relief_requirements
