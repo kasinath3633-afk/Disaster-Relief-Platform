@@ -45,6 +45,24 @@ class PopulationCreate(BaseModel):
     population: int = Field(gt=0)
     vulnerable_population: int = Field(default=0, ge=0)
 
+# ============================================================
+# USER SCHEMAS
+# ============================================================
+
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    phone_number: str
+    password: str
+    role: str = Field(default="coordinator")
+
+
+class UserUpdate(BaseModel):
+    username: str
+    email: str
+    phone_number: str
+    role: str = Field(default="coordinator")
+
 
 # ============================================================
 # RESPONSE CONFIGURATION

@@ -7,12 +7,14 @@ from app.database import engine, Base, get_db
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
 from app.models.population import PopulationPoint
-
+from app.models.user import User
 from app.schemas import (
     DisasterCreate,
     DisasterUpdate,
     WarehouseCreate,
-    WarehouseUpdate
+    WarehouseUpdate,
+    UserCreate,
+    UserUpdate
 )
 
 
@@ -293,3 +295,96 @@ def get_population(
     ).all()
 
     return population_points
+
+# =========================================================
+# User APIs
+# =========================================================
+@app.post("/users")
+def create_user(
+    user: UserCreate,
+    db: Session = Depends(get_db)
+):
+    new_user = User(
+        username=user.username,
+        email=user.email,
+        phone_number=user.phone_number,
+        password_hash=user.password,
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+
+@app.get("/users")
+def get_users(
+    db: Session = Depends(get_db)
+):
+    users = db.query(User).all()
+
+    return users
+@app.get("/users/{user_id}")
+def get_user(
+        user_id: int,
+        db: Session = Depends(get_db)
+    ):
+        user = db.query(User).filter(
+            User.id == user_id
+        ).first()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        return user
+
+@app.put("/users/{user_id}")
+def update_user(
+        user_id: int,
+        user_data: UserUpdate,
+        db: Session = Depends(get_db)
+    ):
+        user = db.query(User).filter(
+            User.id == user_id
+        ).first()
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        user.username = user_data.username
+        user.email = user_data.email
+        user.phone_number = user_data.phone_number
+        user.role = user_data.role
+
+        db.commit()
+        db.refresh(user)
+
+        return user
+
+@app.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": "User deleted successfully"
+    }
