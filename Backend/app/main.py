@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import engine, Base
 from app.database import engine, Base, get_db
-from app.models import Disaster
+from app.models.disaster import Disaster
 from app.schemas import DisasterCreate, DisasterUpdate
 
 Base.metadata.create_all(bind=engine)
