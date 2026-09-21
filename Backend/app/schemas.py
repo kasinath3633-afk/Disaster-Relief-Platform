@@ -1,8 +1,9 @@
-from datetime import datetime
-
 from pydantic import BaseModel, Field, ConfigDict
 
 
+# ============================================================
+# DISASTER SCHEMAS
+# ============================================================
 
 class DisasterCreate(BaseModel):
     name: str
@@ -20,6 +21,9 @@ class DisasterUpdate(BaseModel):
     radius_km: float
 
 
+# ============================================================
+# WAREHOUSE SCHEMAS
+# ============================================================
 
 class WarehouseCreate(BaseModel):
     name: str
@@ -43,12 +47,26 @@ class PopulationCreate(BaseModel):
     latitude: float
     longitude: float
     population: int = Field(gt=0)
-    vulnerable_population: int = Field(default=0, ge=0)
+    vulnerable_population: int = Field(
+        default=0,
+        ge=0
+    )
 
 
 # ============================================================
-# RESPONSE CONFIGURATION
+# SIMULATION SCHEMAS
 # ============================================================
 
-class SchemaResponse(BaseModel):
+class SimulationCreate(BaseModel):
+    disaster_id: int
+
+
+class SimulationResponse(BaseModel):
+    id: int
+    disaster_id: int
+    affected_population: int
+    affected_area_km2: float
+    severity: int
+    status: str
+
     model_config = ConfigDict(from_attributes=True)
