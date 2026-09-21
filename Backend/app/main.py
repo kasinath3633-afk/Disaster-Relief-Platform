@@ -7,14 +7,27 @@ from app.database import engine, Base, get_db
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
 from app.models.population import PopulationPoint
+
 from app.models.user import User
+
+from app.models.simulation import SimulationResult
+
+from app.models.shelter import Shelter
 from app.schemas import (
     DisasterCreate,
     DisasterUpdate,
+    ShelterCreate,
+    ShelterResponse,
+    ShelterUpdate,
     WarehouseCreate,
     WarehouseUpdate,
+
     UserCreate,
-    UserUpdate
+    UserUpdate,
+
+    PopulationCreate,
+    SimulationCreate,
+    SimulationResponse
 )
 
 
@@ -266,17 +279,14 @@ def delete_warehouse(
 
 @app.post("/population")
 def create_population(
-    population: dict,
+    population: PopulationCreate,
     db: Session = Depends(get_db)
 ):
     new_population = PopulationPoint(
-        latitude=population["latitude"],
-        longitude=population["longitude"],
-        population=population["population"],
-        vulnerable_population=population.get(
-            "vulnerable_population",
-            0
-        )
+        latitude=population.latitude,
+        longitude=population.longitude,
+        population=population.population,
+        vulnerable_population=population.vulnerable_population
     )
 
     db.add(new_population)
@@ -295,6 +305,7 @@ def get_population(
     ).all()
 
     return population_points
+
 
 # =========================================================
 # User APIs
@@ -388,3 +399,191 @@ def delete_user(
     return {
         "message": "User deleted successfully"
     }
+
+
+# =========================================================
+# SIMULATION APIs
+# =========================================================
+
+@app.post(
+    "/simulation/run",
+    response_model=SimulationResponse
+)
+def run_simulation(
+    simulation: SimulationCreate,
+    db: Session = Depends(get_db)
+):
+    # Find the disaster
+    disaster = db.query(Disaster).filter(
+        Disaster.id == simulation.disaster_id
+    ).first()
+
+    if disaster is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    # -----------------------------------------------------
+    # Temporary simulation logic
+    # -----------------------------------------------------
+
+    affected_population = 0
+
+    population_points = db.query(
+        PopulationPoint
+    ).all()
+
+    # Temporary distance approximation.
+    #
+    # 1 degree of latitude is approximately 111 km.
+    #
+    # This is NOT the final geographic calculation.
+    # PostGIS will be used later for accurate spatial
+    # calculations.
+    #
+
+    for point in population_points:
+
+        latitude_difference = abs(
+            point.latitude - disaster.latitude
+        )
+
+        longitude_difference = abs(
+            point.longitude - disaster.longitude
+        )
+
+        if (
+            latitude_difference <= disaster.radius_km / 111
+            and
+            longitude_difference <= disaster.radius_km / 111
+        ):
+            affected_population += point.population
+
+    # Approximate affected circular area
+    affected_area_km2 = (
+        3.14159
+        * disaster.radius_km
+        * disaster.radius_km
+    )
+
+    # Create simulation result
+    new_simulation = SimulationResult(
+        disaster_id=disaster.id,
+        affected_population=affected_population,
+        affected_area_km2=affected_area_km2,
+        severity=disaster.severity,
+        status="completed"
+    )
+
+    db.add(new_simulation)
+    db.commit()
+    db.refresh(new_simulation)
+
+    return new_simulation
+
+
+@app.get(
+    "/simulation/{disaster_id}",
+    response_model=list[SimulationResponse]
+)
+def get_simulation_results(
+    disaster_id: int,
+    db: Session = Depends(get_db)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if disaster is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    simulations = db.query(
+        SimulationResult
+    ).filter(
+        SimulationResult.disaster_id == disaster_id
+    ).all()
+
+    return simulations
+@app.post("/shelters", response_model=ShelterResponse)
+def create_shelter(
+    shelter: ShelterCreate,
+    db: Session = Depends(get_db)
+):
+    new_shelter = Shelter(
+        name=shelter.name,
+        latitude=shelter.latitude,
+        longitude=shelter.longitude,
+        capacity=shelter.capacity,
+        occupancy=shelter.occupancy,
+        is_active=shelter.is_active
+    )
+
+    db.add(new_shelter)
+    db.commit()
+    db.refresh(new_shelter)
+
+    return new_shelter
+
+@app.get("/shelters", response_model=list[ShelterResponse])
+def get_shelters(db: Session = Depends(get_db)):
+    shelters = db.query(Shelter).all()
+    return shelters
+
+@app.get("/shelters/{shelter_id}", response_model=ShelterResponse)
+def get_shelter(shelter_id: int, db: Session = Depends(get_db)):
+    if shelter is None:
+        return {"error": "Shelter not found"}
+    shelter = db.query(Shelter).filter(
+        Shelter.id == shelter_id
+    ).first()
+
+    if shelter is None:
+        return {"error": "Shelter not found"}
+
+    return shelter
+
+@app.put("/shelters/{shelter_id}", response_model=ShelterResponse)
+def update_shelter(
+    shelter_id: int,
+    shelter: ShelterUpdate,
+    db: Session = Depends(get_db)
+):
+    existing_shelter = db.query(Shelter).filter(
+        Shelter.id == shelter_id
+    ).first()
+
+    if existing_shelter is None:
+        return {"error": "Shelter not found"}
+
+    existing_shelter.name = shelter.name
+    existing_shelter.latitude = shelter.latitude
+    existing_shelter.longitude = shelter.longitude
+    existing_shelter.capacity = shelter.capacity
+    existing_shelter.occupancy = shelter.occupancy
+    existing_shelter.is_active = shelter.is_active
+
+    db.commit()
+    db.refresh(existing_shelter)
+
+    return existing_shelter
+
+@app.delete("/shelters/{shelter_id}")
+def delete_shelter(
+    shelter_id: int,
+    db: Session = Depends(get_db)
+):
+    shelter = db.query(Shelter).filter(
+        Shelter.id == shelter_id
+    ).first()
+
+    if shelter is None:
+        return {"error": "Shelter not found"}
+
+    db.delete(shelter)
+    db.commit()
+
+    return {"message": "Shelter deleted successfully"}
