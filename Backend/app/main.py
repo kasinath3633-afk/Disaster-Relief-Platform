@@ -134,7 +134,8 @@ def health():
 @app.post("/disasters")
 def create_disaster(
     disaster: DisasterCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     new_disaster = Disaster(
         name=disaster.name,
@@ -153,7 +154,8 @@ def create_disaster(
 
 @app.get("/disasters")
 def get_disasters(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disasters = db.query(Disaster).all()
 
@@ -163,7 +165,8 @@ def get_disasters(
 @app.get("/disasters/{disaster_id}")
 def get_disaster(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -181,7 +184,8 @@ def get_disaster(
 def update_disaster(
     disaster_id: int,
     disaster: DisasterUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     existing_disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -207,7 +211,8 @@ def update_disaster(
 @app.delete("/disasters/{disaster_id}")
 def delete_disaster(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -233,7 +238,8 @@ def delete_disaster(
 @app.post("/warehouses")
 def create_warehouse(
     warehouse: WarehouseCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     new_warehouse = Warehouse(
         name=warehouse.name,
@@ -251,7 +257,8 @@ def create_warehouse(
 
 @app.get("/warehouses")
 def get_warehouses(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouses = db.query(Warehouse).all()
 
@@ -261,7 +268,8 @@ def get_warehouses(
 @app.get("/warehouses/{warehouse_id}")
 def get_warehouse(
     warehouse_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == warehouse_id
@@ -280,7 +288,8 @@ def get_warehouse(
 def update_warehouse(
     warehouse_id: int,
     warehouse_data: WarehouseUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == warehouse_id
@@ -306,7 +315,8 @@ def update_warehouse(
 @app.delete("/warehouses/{warehouse_id}")
 def delete_warehouse(
     warehouse_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == warehouse_id
@@ -336,7 +346,9 @@ def delete_warehouse(
 )
 def create_resource(
     resource: ResourceCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+    
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == resource.warehouse_id
@@ -367,7 +379,8 @@ def create_resource(
     response_model=list[ResourceResponse]
 )
 def get_resources(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resources = db.query(Resource).all()
 
@@ -380,7 +393,8 @@ def get_resources(
 )
 def get_resource(
     resource_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resource = db.query(Resource).filter(
         Resource.id == resource_id
@@ -402,7 +416,8 @@ def get_resource(
 def update_resource(
     resource_id: int,
     resource_data: ResourceUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resource = db.query(Resource).filter(
         Resource.id == resource_id
@@ -438,7 +453,8 @@ def update_resource(
 @app.delete("/resources/{resource_id}")
 def delete_resource(
     resource_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resource = db.query(Resource).filter(
         Resource.id == resource_id
@@ -465,7 +481,8 @@ def delete_resource(
 @app.post("/population")
 def create_population(
     population: PopulationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     new_population = PopulationPoint(
         latitude=population.latitude,
@@ -483,7 +500,8 @@ def create_population(
 
 @app.get("/population")
 def get_population(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     population_points = db.query(
         PopulationPoint
@@ -499,7 +517,8 @@ def get_population(
 @app.post("/users")
 def create_user(
     user: UserCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     new_user = User(
         username=user.username,
@@ -517,7 +536,8 @@ def create_user(
 
 @app.get("/users")
 def get_users(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     users = db.query(User).all()
 
@@ -527,7 +547,8 @@ def get_users(
 @app.get("/users/{user_id}")
 def get_user(
     user_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -546,7 +567,8 @@ def get_user(
 def update_user(
     user_id: int,
     user_data: UserUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -572,7 +594,8 @@ def update_user(
 @app.delete("/users/{user_id}")
 def delete_user(
     user_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -602,7 +625,8 @@ def delete_user(
 )
 def run_simulation(
     simulation: SimulationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == simulation.disaster_id
@@ -665,7 +689,8 @@ def run_simulation(
 )
 def get_simulation_results(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -696,7 +721,8 @@ def get_simulation_results(
 )
 def create_shelter(
     shelter: ShelterCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     new_shelter = Shelter(
         name=shelter.name,
@@ -732,7 +758,8 @@ def get_shelters(
 )
 def get_shelter(
     shelter_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     shelter = db.query(Shelter).filter(
         Shelter.id == shelter_id
@@ -754,7 +781,8 @@ def get_shelter(
 def update_shelter(
     shelter_id: int,
     shelter: ShelterUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     existing_shelter = db.query(Shelter).filter(
         Shelter.id == shelter_id
@@ -782,7 +810,8 @@ def update_shelter(
 @app.delete("/shelters/{shelter_id}")
 def delete_shelter(
     shelter_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     shelter = db.query(Shelter).filter(
         Shelter.id == shelter_id
@@ -812,7 +841,8 @@ def delete_shelter(
 )
 def estimate_relief(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -874,7 +904,8 @@ def estimate_relief(
 )
 def get_relief_requirements(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
