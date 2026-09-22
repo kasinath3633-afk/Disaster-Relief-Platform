@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import engine, Base, get_db
-from app.security import hash_password
+from app.security import hash_password, verify_password, create_access_token
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
 from app.models.population import PopulationPoint
@@ -38,7 +38,12 @@ from app.schemas import (
 
     ResourceCreate,
     ResourceUpdate,
-    ResourceResponse
+    ResourceResponse,
+
+    UserCreate,
+    UserUpdate,
+    UserLogin,
+    Token
 )
 
 
@@ -851,3 +856,22 @@ def get_relief_requirements(
     ).all()
 
     return relief_requirements
+
+@app.post("/login", response_model=Token)
+def login(user: UserLogin, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == user.email).first()
+
+    if not existing_user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if not verify_password(user.password, existing_user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    access_token = create_access_token({
+        "sub": str(existing_user.id)
+    })
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
