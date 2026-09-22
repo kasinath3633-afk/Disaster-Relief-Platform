@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import engine, Base, get_db
-
+from app.security import hash_password
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
 from app.models.population import PopulationPoint
@@ -463,7 +463,7 @@ def create_user(
         username=user.username,
         email=user.email,
         phone_number=user.phone_number,
-        password_hash=user.password
+       password_hash=hash_password(user.password)
     )
 
     db.add(new_user)
