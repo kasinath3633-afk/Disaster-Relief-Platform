@@ -14,6 +14,8 @@ from app.models.relief import ReliefRequirement
 from app.models.shelter import Shelter
 from app.models.resource import Resource
 
+from app.geo import haversine_km
+
 from app.schemas import (
     DisasterCreate,
     DisasterUpdate,
@@ -659,19 +661,14 @@ def run_simulation(
     # Temporary geographic approximation
     for point in population_points:
 
-        latitude_difference = abs(
-            point.latitude - disaster.latitude
+        distance = haversine_km(
+            disaster.latitude,
+            disaster.longitude,
+            point.latitude,
+            point.longitude
         )
 
-        longitude_difference = abs(
-            point.longitude - disaster.longitude
-        )
-
-        if (
-            latitude_difference <= disaster.radius_km / 111
-            and
-            longitude_difference <= disaster.radius_km / 111
-        ):
+        if distance <= disaster.radius_km:
             affected_population += point.population
 
     affected_area_km2 = (
