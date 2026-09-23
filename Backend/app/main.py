@@ -1,9 +1,10 @@
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import engine, Base, get_db
-from app.security import hash_password
+from app.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
 from app.models.population import PopulationPoint
@@ -38,7 +39,12 @@ from app.schemas import (
 
     ResourceCreate,
     ResourceUpdate,
-    ResourceResponse
+    ResourceResponse,
+
+    UserCreate,
+    UserUpdate,
+    UserLogin,
+    Token
 )
 
 
@@ -50,6 +56,55 @@ Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI()
+
+security = HTTPBearer()
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+
+    user_id = payload.get("sub")
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    return user
+
+def require_role(required_role: str):
+    def role_checker(
+        current_user: User = Depends(get_current_user)
+    ):
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient permissions"
+            )
+
+        return current_user
+    return role_checker
 
 
 # =========================================================
@@ -92,7 +147,8 @@ def health():
 @app.post("/disasters")
 def create_disaster(
     disaster: DisasterCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     new_disaster = Disaster(
         name=disaster.name,
@@ -111,7 +167,8 @@ def create_disaster(
 
 @app.get("/disasters")
 def get_disasters(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disasters = db.query(Disaster).all()
 
@@ -121,7 +178,8 @@ def get_disasters(
 @app.get("/disasters/{disaster_id}")
 def get_disaster(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -139,7 +197,8 @@ def get_disaster(
 def update_disaster(
     disaster_id: int,
     disaster: DisasterUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     existing_disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -165,7 +224,8 @@ def update_disaster(
 @app.delete("/disasters/{disaster_id}")
 def delete_disaster(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -191,7 +251,8 @@ def delete_disaster(
 @app.post("/warehouses")
 def create_warehouse(
     warehouse: WarehouseCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     new_warehouse = Warehouse(
         name=warehouse.name,
@@ -209,7 +270,8 @@ def create_warehouse(
 
 @app.get("/warehouses")
 def get_warehouses(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouses = db.query(Warehouse).all()
 
@@ -219,7 +281,8 @@ def get_warehouses(
 @app.get("/warehouses/{warehouse_id}")
 def get_warehouse(
     warehouse_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == warehouse_id
@@ -238,7 +301,8 @@ def get_warehouse(
 def update_warehouse(
     warehouse_id: int,
     warehouse_data: WarehouseUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == warehouse_id
@@ -264,7 +328,8 @@ def update_warehouse(
 @app.delete("/warehouses/{warehouse_id}")
 def delete_warehouse(
     warehouse_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == warehouse_id
@@ -294,7 +359,9 @@ def delete_warehouse(
 )
 def create_resource(
     resource: ResourceCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+    
 ):
     warehouse = db.query(Warehouse).filter(
         Warehouse.id == resource.warehouse_id
@@ -325,7 +392,8 @@ def create_resource(
     response_model=list[ResourceResponse]
 )
 def get_resources(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resources = db.query(Resource).all()
 
@@ -338,7 +406,8 @@ def get_resources(
 )
 def get_resource(
     resource_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resource = db.query(Resource).filter(
         Resource.id == resource_id
@@ -360,7 +429,8 @@ def get_resource(
 def update_resource(
     resource_id: int,
     resource_data: ResourceUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resource = db.query(Resource).filter(
         Resource.id == resource_id
@@ -396,7 +466,8 @@ def update_resource(
 @app.delete("/resources/{resource_id}")
 def delete_resource(
     resource_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     resource = db.query(Resource).filter(
         Resource.id == resource_id
@@ -423,7 +494,8 @@ def delete_resource(
 @app.post("/population")
 def create_population(
     population: PopulationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     new_population = PopulationPoint(
         latitude=population.latitude,
@@ -441,7 +513,8 @@ def create_population(
 
 @app.get("/population")
 def get_population(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     population_points = db.query(
         PopulationPoint
@@ -475,7 +548,8 @@ def create_user(
 
 @app.get("/users")
 def get_users(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(require_role("admin"))
 ):
     users = db.query(User).all()
 
@@ -485,7 +559,8 @@ def get_users(
 @app.get("/users/{user_id}")
 def get_user(
     user_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -504,7 +579,8 @@ def get_user(
 def update_user(
     user_id: int,
     user_data: UserUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -530,7 +606,8 @@ def update_user(
 @app.delete("/users/{user_id}")
 def delete_user(
     user_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -560,7 +637,8 @@ def delete_user(
 )
 def run_simulation(
     simulation: SimulationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == simulation.disaster_id
@@ -623,7 +701,8 @@ def run_simulation(
 )
 def get_simulation_results(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -654,7 +733,8 @@ def get_simulation_results(
 )
 def create_shelter(
     shelter: ShelterCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     new_shelter = Shelter(
         name=shelter.name,
@@ -690,7 +770,8 @@ def get_shelters(
 )
 def get_shelter(
     shelter_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     shelter = db.query(Shelter).filter(
         Shelter.id == shelter_id
@@ -712,7 +793,8 @@ def get_shelter(
 def update_shelter(
     shelter_id: int,
     shelter: ShelterUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     existing_shelter = db.query(Shelter).filter(
         Shelter.id == shelter_id
@@ -740,7 +822,8 @@ def update_shelter(
 @app.delete("/shelters/{shelter_id}")
 def delete_shelter(
     shelter_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     shelter = db.query(Shelter).filter(
         Shelter.id == shelter_id
@@ -770,7 +853,8 @@ def delete_shelter(
 )
 def estimate_relief(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -832,7 +916,8 @@ def estimate_relief(
 )
 def get_relief_requirements(
     disaster_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
 ):
     disaster = db.query(Disaster).filter(
         Disaster.id == disaster_id
@@ -851,3 +936,31 @@ def get_relief_requirements(
     ).all()
 
     return relief_requirements
+
+@app.post("/login", response_model=Token)
+def login(user: UserLogin, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == user.email).first()
+
+    if not existing_user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if not verify_password(user.password, existing_user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    access_token = create_access_token({
+        "sub": str(existing_user.id)
+    })
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+@app.get("/test-auth")
+def test_auth(current_user: User = Depends(get_current_user)):
+    return {
+        "message": "Authentication successful",
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email
+    }
+
