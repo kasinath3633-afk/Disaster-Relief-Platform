@@ -3,7 +3,7 @@ import os
 import jwt
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Depends
 
 
 load_dotenv()
@@ -66,3 +66,5 @@ def decode_access_token(token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
+
+

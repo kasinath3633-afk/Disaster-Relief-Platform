@@ -950,3 +950,52 @@ def test_auth(current_user: User = Depends(get_current_user)):
         "username": current_user.username,
         "email": current_user.email
     }
+
+security = HTTPBearer()
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+
+    user_id = payload.get("sub")
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    return user
+
+
+def require_role(required_role: str):
+    def role_checker(
+        current_user: User = Depends(get_current_user)
+    ):
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient permissions"
+            )
+
+        return current_user
