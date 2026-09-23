@@ -13,6 +13,7 @@ from app.models.simulation import SimulationResult
 from app.models.relief import ReliefRequirement
 from app.models.shelter import Shelter
 from app.models.resource import Resource
+from app.utils.geo import haversine_distance
 
 from app.schemas import (
     DisasterCreate,
@@ -656,26 +657,23 @@ def run_simulation(
         PopulationPoint
     ).all()
 
-    # Temporary geographic approximation
+    # Calculate the real distance between
+    # the disaster center and each population point.
     for point in population_points:
 
-        latitude_difference = abs(
-            point.latitude - disaster.latitude
+        distance = haversine_distance(
+            disaster.latitude,
+            disaster.longitude,
+            point.latitude,
+            point.longitude
         )
 
-        longitude_difference = abs(
-            point.longitude - disaster.longitude
-        )
-
-        if (
-            latitude_difference <= disaster.radius_km / 111
-            and
-            longitude_difference <= disaster.radius_km / 111
-        ):
+        if distance <= disaster.radius_km:
             affected_population += point.population
 
+    # Area of the circular disaster zone
     affected_area_km2 = (
-        3.14159
+        3.141592653589793
         * disaster.radius_km
         * disaster.radius_km
     )
