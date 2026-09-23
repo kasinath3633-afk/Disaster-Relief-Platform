@@ -13,6 +13,8 @@ from app.models.simulation import SimulationResult
 from app.models.relief import ReliefRequirement
 from app.models.shelter import Shelter
 from app.models.resource import Resource
+
+from app.geo import haversine_km
 from app.utils.geo import haversine_distance
 
 from app.schemas import (
@@ -661,7 +663,7 @@ def run_simulation(
     # the disaster center and each population point.
     for point in population_points:
 
-        distance = haversine_distance(
+        distance = haversine_km(
             disaster.latitude,
             disaster.longitude,
             point.latitude,
