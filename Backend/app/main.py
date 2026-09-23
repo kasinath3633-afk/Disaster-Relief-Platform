@@ -93,6 +93,19 @@ def get_current_user(
 
     return user
 
+def require_role(required_role: str):
+    def role_checker(
+        current_user: User = Depends(get_current_user)
+    ):
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient permissions"
+            )
+
+        return current_user
+    return role_checker
+
 
 # =========================================================
 # ROOT
@@ -517,8 +530,7 @@ def get_population(
 @app.post("/users")
 def create_user(
     user: UserCreate,
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     new_user = User(
         username=user.username,
@@ -536,7 +548,8 @@ def create_user(
 
 @app.get("/users")
 def get_users(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(require_role("admin"))
 ):
     users = db.query(User).all()
 
@@ -547,7 +560,7 @@ def get_users(
 def get_user(
     user_id: int,
     db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -567,7 +580,7 @@ def update_user(
     user_id: int,
     user_data: UserUpdate,
     db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -594,7 +607,7 @@ def update_user(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(
         User.id == user_id
@@ -951,51 +964,3 @@ def test_auth(current_user: User = Depends(get_current_user)):
         "email": current_user.email
     }
 
-security = HTTPBearer()
-
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    token = credentials.credentials
-    payload = decode_access_token(token)
-
-    user_id = payload.get("sub")
-
-    if user_id is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-
-    try:
-        user_id = int(user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
-
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    return user
-
-
-def require_role(required_role: str):
-    def role_checker(
-        current_user: User = Depends(get_current_user)
-    ):
-        if current_user.role != required_role:
-            raise HTTPException(
-                status_code=403,
-                detail="Insufficient permissions"
-            )
-
-        return current_user
