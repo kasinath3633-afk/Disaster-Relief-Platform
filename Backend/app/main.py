@@ -401,6 +401,19 @@ def get_resources(
     resources = db.query(Resource).all()
 
     return resources
+@app.get(
+    "/resources/available",
+    response_model=list[ResourceResponse]
+)
+def get_available_resources(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    resources = db.query(Resource).filter(
+        Resource.quantity > 0
+    ).all()
+
+    return resources
 
 
 @app.get(
@@ -944,6 +957,48 @@ def get_relief_requirements(
     ).all()
 
     return relief_requirements
+@app.get("/relief/{disaster_id}/availability")
+def get_relief_availability(
+    disaster_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    relief = db.query(ReliefRequirement).filter(
+        ReliefRequirement.disaster_id == disaster_id
+    ).order_by(
+        ReliefRequirement.id.desc()
+    ).first()
+
+    if relief is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Relief requirement not found"
+        )
+
+    resources = db.query(Resource).filter(
+        Resource.quantity > 0
+    ).all()
+
+    available = {
+        resource.name: resource.quantity
+        for resource in resources
+    }
+
+    return {
+        "disaster_id": disaster_id,
+        "required": {
+            "food_packets": relief.food_packets,
+            "water_liters": relief.water_liters,
+            "medical_kits": relief.medical_kits,
+            "blankets": relief.blankets
+        },
+        "available": {
+            "food_packets": available.get("food_packets", 0),
+            "water_liters": available.get("water_liters", 0),
+            "medical_kits": available.get("medical_kits", 0),
+            "blankets": available.get("blankets", 0)
+        }
+    }
 
 @app.post("/login", response_model=Token)
 def login(user: UserLogin, db: Session = Depends(get_db)):
