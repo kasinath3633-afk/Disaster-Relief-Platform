@@ -763,6 +763,17 @@ def get_shelters(
 
     return shelters
 
+@app.get("/shelters/available", response_model=list[ShelterResponse])
+def get_available_shelters(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    shelters = db.query(Shelter).filter(
+        Shelter.is_active == True,
+        Shelter.occupancy < Shelter.capacity
+    ).all()
+
+    return shelters
 
 @app.get(
     "/shelters/{shelter_id}",
@@ -887,12 +898,9 @@ def estimate_relief(
 
     water_liters = affected_population * 5
 
-    medical_kits = max(
-        1,
-        affected_population // 20
-    )
+    medical_kits = int(affected_population * 0.10)
 
-    blankets = affected_population
+    blankets = int(affected_population * 0.50)
 
     new_relief = ReliefRequirement(
         disaster_id=disaster_id,
