@@ -13,9 +13,8 @@ from app.models.simulation import SimulationResult
 from app.models.relief import ReliefRequirement
 from app.models.shelter import Shelter
 from app.models.resource import Resource
-
-from app.geo import haversine_km
-from app.utils.geo import haversine_distance
+from app.services.allocation import create_allocation
+from app.utils.geo import haversine_km
 
 from app.schemas import (
     DisasterCreate,
@@ -1027,3 +1026,76 @@ def test_auth(current_user: User = Depends(get_current_user)):
         "email": current_user.email
     }
 
+@app.post("/relief/{disaster_id}/allocate")
+def allocate_relief(
+    disaster_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if not disaster:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    requirement = db.query(ReliefRequirement).filter(
+        ReliefRequirement.disaster_id == disaster_id
+    ).first()
+
+    if not requirement:
+        raise HTTPException(
+            status_code=404,
+            detail="Relief requirement not found"
+        )
+
+    resource_names = {
+        "food_packets": requirement.food_packets,
+        "water_liters": requirement.water_liters,
+        "medical_kits": requirement.medical_kits,
+        "blankets": requirement.blankets
+    }
+
+    results = {}
+
+    for resource_name, required in resource_names.items():
+
+        resource = db.query(Resource).filter(
+            Resource.name == resource_name,
+            Resource.quantity > 0
+        ).first()
+
+        if not resource:
+            results[resource_name] = {
+                "required": required,
+                "available": 0,
+                "allocated": 0,
+                "shortage": required
+            }
+            continue
+
+        available = resource.quantity
+
+        allocation, shortage = create_allocation(
+            db=db,
+            disaster_id=disaster_id,
+            resource=resource,
+            required=required
+        )
+
+        results[resource_name] = {
+            "required": required,
+            "available": available,
+            "allocated": allocation.allocated_quantity,
+            "shortage": shortage
+        }
+
+    db.commit()
+
+    return {
+        "disaster_id": disaster_id,
+        "allocation": results
+    }

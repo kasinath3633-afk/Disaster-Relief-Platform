@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -179,5 +181,20 @@ class ResourceResponse(BaseModel):
     name: str
     quantity: int
     unit: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================
+# ALLOCATION SCHEMAS
+# ============================================================
+
+class AllocationResponse(BaseModel):
+    id: int
+    disaster_id: int
+    warehouse_id: int
+    resource_id: int
+    allocated_quantity: int
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

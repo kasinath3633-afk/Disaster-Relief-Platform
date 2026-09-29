@@ -1,32 +1,32 @@
-from math import radians, sin, cos, sqrt, atan2
+import math
 
 
-def haversine_distance(
-    lat1: float,
-    lon1: float,
-    lat2: float,
-    lon2: float
+def haversine_km(
+    latitude1: float,
+    longitude1: float,
+    latitude2: float,
+    longitude2: float
 ) -> float:
-    """
-    Calculate the distance between two latitude/longitude
-    points in kilometers.
-    """
-
     earth_radius_km = 6371.0
 
-    lat1_rad = radians(lat1)
-    lat2_rad = radians(lat2)
+    latitude1 = math.radians(latitude1)
+    latitude2 = math.radians(latitude2)
 
-    delta_lat = radians(lat2 - lat1)
-    delta_lon = radians(lon2 - lon1)
-
-    a = (
-        sin(delta_lat / 2) ** 2
-        + cos(lat1_rad)
-        * cos(lat2_rad)
-        * sin(delta_lon / 2) ** 2
+    latitude_difference = latitude2 - latitude1
+    longitude_difference = math.radians(
+        longitude2 - longitude1
     )
 
-    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    a = (
+        math.sin(latitude_difference / 2) ** 2
+        + math.cos(latitude1)
+        * math.cos(latitude2)
+        * math.sin(longitude_difference / 2) ** 2
+    )
+
+    c = 2 * math.atan2(
+        math.sqrt(a),
+        math.sqrt(1 - a)
+    )
 
     return earth_radius_km * c
