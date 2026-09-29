@@ -1063,12 +1063,12 @@ def allocate_relief(
 
     for resource_name, required in resource_names.items():
 
-        resource = db.query(Resource).filter(
+        resources = db.query(Resource).filter(
             Resource.name == resource_name,
             Resource.quantity > 0
-        ).first()
+        ).all()
 
-        if not resource:
+        if not resources:
             results[resource_name] = {
                 "required": required,
                 "available": 0,
@@ -1077,20 +1077,33 @@ def allocate_relief(
             }
             continue
 
-        available = resource.quantity
-
-        allocation, shortage = create_allocation(
-            db=db,
-            disaster_id=disaster_id,
-            resource=resource,
-            required=required
+        total_available = sum(
+            resource.quantity for resource in resources
         )
+
+        remaining_required = required
+        total_allocated = 0
+
+        for resource in resources:
+
+            if remaining_required <= 0:
+                break
+
+            allocation, shortage = create_allocation(
+                db=db,
+                disaster_id=disaster_id,
+                resource=resource,
+                required=remaining_required
+            )
+
+            total_allocated += allocation.allocated_quantity
+            remaining_required -= allocation.allocated_quantity
 
         results[resource_name] = {
             "required": required,
-            "available": available,
-            "allocated": allocation.allocated_quantity,
-            "shortage": shortage
+            "available": total_available,
+            "allocated": total_allocated,
+            "shortage": remaining_required
         }
 
     db.commit()
