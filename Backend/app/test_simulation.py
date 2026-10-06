@@ -4,7 +4,7 @@ from app.database import SessionLocal
 from app.models.disaster import Disaster
 from app.models.population import PopulationPoint
 from app.models.simulation import SimulationResult
-from app.utils.geo import haversine_distance
+from app.utils.geo import haversine_km
 
 
 db = SessionLocal()
@@ -25,7 +25,7 @@ try:
     affected_population = 0
 
     for point in population_points:
-        distance = haversine_distance(
+        distance = haversine_km(
             disaster.latitude,
             disaster.longitude,
             point.latitude,
