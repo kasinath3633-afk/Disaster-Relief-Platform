@@ -1,11 +1,11 @@
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi.responses import StreamingResponse
-from app.services.report import generate_disaster_report
+from app.services.report import generate_disaster_report, generate_comprehensive_disaster_report
 
-from app.database import engine, Base, get_db
+from app.database import engine, Base, get_db, SessionLocal
 from app.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.models.disaster import Disaster
 from app.models.warehouse import Warehouse
@@ -16,7 +16,26 @@ from app.models.relief import ReliefRequirement
 from app.models.shelter import Shelter
 from app.models.resource import Resource
 from app.models.allocation import Allocation
+from app.models.impact import ImpactAssessment
+from app.models.routing import RoadNode, RoadEdge
 from app.services.allocation import create_allocation
+from app.services.impact import execute_and_persist_impact_assessment
+from app.services.gis import (
+    get_nearby_shelters_spatial,
+    get_nearby_warehouses_spatial,
+    get_affected_population_spatial,
+    ensure_spatial_indexes,
+    validate_coordinates
+)
+from app.services.routing import (
+    RoutingGraph,
+    dijkstra_safe_path,
+    astar_safe_path,
+    seed_sample_road_network
+)
+from app.services.intelligent_allocation import run_intelligent_allocation_heuristic
+from app.services.external_data import ResilientWeatherService, get_weather_adjusted_impact_score
+from app.services.dashboard import get_disaster_dashboard_summary
 from app.utils.geo import haversine_km
 
 from app.schemas import (
@@ -49,20 +68,37 @@ from app.schemas import (
     UserCreate,
     UserUpdate,
     UserLogin,
-    Token
+    Token,
+    ImpactAssessmentResponse,
+    NearbyShelterResponse,
+    NearbyWarehouseResponse,
+    AffectedPopulationSpatialResponse,
+    RouteNodeResponse,
+    RouteEdgeResponse,
+    RouteRequest,
+    RouteResponse,
+    RoadEdgeBlockUpdate,
+    IntelligentAllocationResponse,
+    NormalizedWeatherResponse,
+    DashboardSummaryResponse
 )
 
 
 # =========================================================
-# CREATE DATABASE TABLES
+# CREATE DATABASE TABLES & SPATIAL INDEXES
 # =========================================================
 
 Base.metadata.create_all(bind=engine)
+with SessionLocal() as _db_init:
+    ensure_spatial_indexes(_db_init)
+
 
 
 app = FastAPI()
+weather_service = ResilientWeatherService()
 
 security = HTTPBearer()
+
 
 
 def get_current_user(
@@ -739,6 +775,73 @@ def get_simulation_results(
 
 
 # =========================================================
+# IMPACT ASSESSMENT APIs
+# =========================================================
+
+@app.post(
+    "/impact/run/{disaster_id}",
+    response_model=ImpactAssessmentResponse
+)
+def run_impact_assessment(
+    disaster_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if disaster is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    assessment = execute_and_persist_impact_assessment(
+        db=db,
+        disaster_id=disaster_id
+    )
+
+    return assessment
+
+
+@app.get(
+    "/impact/{disaster_id}",
+    response_model=ImpactAssessmentResponse
+)
+def get_impact_assessment(
+    disaster_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if disaster is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    assessment = db.query(
+        ImpactAssessment
+    ).filter(
+        ImpactAssessment.disaster_id == disaster_id
+    ).order_by(
+        ImpactAssessment.id.desc()
+    ).first()
+
+    if assessment is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Impact assessment not found"
+        )
+
+    return assessment
+
+
+# =========================================================
 # SHELTER APIs
 # =========================================================
 
@@ -867,6 +970,189 @@ def delete_shelter(
     return {
         "message": "Shelter deleted successfully"
     }
+
+
+# =========================================================
+# GIS APIs (POSTGIS SPATIAL QUERIES)
+# =========================================================
+
+@app.get(
+    "/gis/shelters/nearby",
+    response_model=list[NearbyShelterResponse]
+)
+def get_nearby_shelters_endpoint(
+    latitude: float = Query(..., ge=-90.0, le=90.0, description="Target latitude (EPSG:4326)"),
+    longitude: float = Query(..., ge=-180.0, le=180.0, description="Target longitude (EPSG:4326)"),
+    radius_km: float = Query(50.0, gt=0.0, description="Search radius in kilometers"),
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of shelters to return"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        shelters = get_nearby_shelters_spatial(
+            db=db,
+            latitude=latitude,
+            longitude=longitude,
+            radius_km=radius_km,
+            limit=limit
+        )
+        return shelters
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get(
+    "/gis/warehouses/nearby",
+    response_model=list[NearbyWarehouseResponse]
+)
+def get_nearby_warehouses_endpoint(
+    latitude: float = Query(..., ge=-90.0, le=90.0, description="Target latitude (EPSG:4326)"),
+    longitude: float = Query(..., ge=-180.0, le=180.0, description="Target longitude (EPSG:4326)"),
+    radius_km: float = Query(100.0, gt=0.0, description="Search radius in kilometers"),
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of warehouses to return"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        warehouses = get_nearby_warehouses_spatial(
+            db=db,
+            latitude=latitude,
+            longitude=longitude,
+            radius_km=radius_km,
+            limit=limit
+        )
+        return warehouses
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get(
+    "/gis/population/affected",
+    response_model=AffectedPopulationSpatialResponse
+)
+def get_affected_population_spatial_endpoint(
+    disaster_id: int = Query(..., description="Target disaster ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    disaster = db.query(Disaster).filter(Disaster.id == disaster_id).first()
+    if disaster is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    try:
+        result = get_affected_population_spatial(db=db, disaster_id=disaster_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Disaster not found")
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =========================================================
+# ROUTING APIs (SAFE PATH & GRAPH ALGORITHMS)
+# =========================================================
+
+@app.post(
+    "/routing/seed-network",
+    response_model=dict
+)
+def seed_road_network_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = seed_sample_road_network(db)
+    return result
+
+
+@app.get(
+    "/routing/nodes",
+    response_model=list[RouteNodeResponse]
+)
+def get_road_nodes_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    nodes = db.query(RoadNode).all()
+    return nodes
+
+
+@app.get(
+    "/routing/edges",
+    response_model=list[RouteEdgeResponse]
+)
+def get_road_edges_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    edges = db.query(RoadEdge).all()
+    return edges
+
+
+@app.put(
+    "/routing/edges/{edge_id}/block",
+    response_model=RouteEdgeResponse
+)
+def set_road_edge_block_status(
+    edge_id: int,
+    block_data: RoadEdgeBlockUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    edge = db.query(RoadEdge).filter(RoadEdge.id == edge_id).first()
+    if edge is None:
+        raise HTTPException(status_code=404, detail="Road edge not found")
+
+    edge.is_blocked = block_data.is_blocked
+    db.commit()
+    db.refresh(edge)
+    return edge
+
+
+@app.post(
+    "/routing/calculate-route",
+    response_model=RouteResponse
+)
+def calculate_route_endpoint(
+    req: RouteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    origin = db.query(RoadNode).filter(RoadNode.id == req.origin_node_id).first()
+    if not origin:
+        raise HTTPException(status_code=404, detail=f"Origin node {req.origin_node_id} not found")
+
+    dest = db.query(RoadNode).filter(RoadNode.id == req.destination_node_id).first()
+    if not dest:
+        raise HTTPException(status_code=404, detail=f"Destination node {req.destination_node_id} not found")
+
+    graph = RoutingGraph.from_database(db)
+
+    if req.algorithm.lower() == "astar":
+        route = astar_safe_path(
+            graph=graph,
+            origin_id=req.origin_node_id,
+            destination_id=req.destination_node_id,
+            prefer_safe=req.prefer_safe
+        )
+    else:
+        route = dijkstra_safe_path(
+            graph=graph,
+            origin_id=req.origin_node_id,
+            destination_id=req.destination_node_id,
+            prefer_safe=req.prefer_safe
+        )
+
+    if route is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No passable route found between node {req.origin_node_id} and {req.destination_node_id}. Road segments may be blocked or disconnected."
+        )
+
+    return route
+
 
 
 # =========================================================
@@ -1116,6 +1402,52 @@ def allocate_relief(
         "allocation": results
     }
 
+
+@app.post(
+    "/relief/{disaster_id}/intelligent-allocate",
+    response_model=IntelligentAllocationResponse
+)
+def intelligent_allocate_relief_endpoint(
+    disaster_id: int,
+    commit_to_db: bool = Query(True, description="Whether to persist allocations and decrement warehouse inventories in database"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if not disaster:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    requirement = db.query(ReliefRequirement).filter(
+        ReliefRequirement.disaster_id == disaster_id
+    ).first()
+
+    if not requirement:
+        raise HTTPException(
+            status_code=404,
+            detail="Relief requirement not found"
+        )
+
+    result = run_intelligent_allocation_heuristic(
+        db=db,
+        disaster_id=disaster_id,
+        commit_to_db=commit_to_db
+    )
+
+    if not result:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to compute intelligent allocation"
+        )
+
+    return result
+
+
 @app.get("/reports/{disaster_id}")
 def generate_report(
     disaster_id: int,
@@ -1167,3 +1499,131 @@ def generate_report(
             "Content-Disposition": f"inline; filename=disaster_report_{disaster_id}.pdf"
         }
     )
+
+
+# =========================================================
+# EXTERNAL DATA & ADVANCED REPORTING APIs
+# =========================================================
+
+@app.get(
+    "/external/weather",
+    response_model=NormalizedWeatherResponse
+)
+def get_external_weather_endpoint(
+    latitude: float = Query(..., ge=-90.0, le=90.0),
+    longitude: float = Query(..., ge=-180.0, le=180.0),
+    current_user: User = Depends(get_current_user)
+):
+    weather = weather_service.get_weather(latitude, longitude)
+    return weather
+
+
+@app.get("/reports/{disaster_id}/comprehensive")
+def generate_comprehensive_report_endpoint(
+    disaster_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if not disaster:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    simulation = db.query(SimulationResult).filter(
+        SimulationResult.disaster_id == disaster_id
+    ).order_by(SimulationResult.id.desc()).first()
+
+    impact = db.query(ImpactAssessment).filter(
+        ImpactAssessment.disaster_id == disaster_id
+    ).order_by(ImpactAssessment.id.desc()).first()
+
+    relief = db.query(ReliefRequirement).filter(
+        ReliefRequirement.disaster_id == disaster_id
+    ).order_by(ReliefRequirement.id.desc()).first()
+
+    allocations = db.query(Allocation).filter(
+        Allocation.disaster_id == disaster_id
+    ).all()
+
+    resources = db.query(Resource).all()
+    shelters = db.query(Shelter).all()
+    population_points = db.query(PopulationPoint).all()
+
+    weather = weather_service.get_weather(disaster.latitude, disaster.longitude).model_dump()
+
+    unmet_demands = []
+    if relief:
+        resource_requirements = {
+            "food_packets": relief.food_packets,
+            "water_liters": relief.water_liters,
+            "medical_kits": relief.medical_kits,
+            "blankets": relief.blankets
+        }
+        res_by_id = {r.id: r.name for r in resources}
+        allocated_sums = {}
+        for a in allocations:
+            rname = res_by_id.get(a.resource_id)
+            if rname:
+                allocated_sums[rname] = allocated_sums.get(rname, 0) + a.allocated_quantity
+
+        for rname, req_qty in resource_requirements.items():
+            alloc_qty = allocated_sums.get(rname, 0)
+            unmet_demands.append({
+                "resource": rname,
+                "required": req_qty,
+                "allocated": alloc_qty,
+                "unmet": max(0, req_qty - alloc_qty)
+            })
+
+    pdf = generate_comprehensive_disaster_report(
+        disaster=disaster,
+        simulation=simulation,
+        impact=impact,
+        relief=relief,
+        allocations=allocations,
+        resources=resources,
+        shelters=shelters,
+        population_points=population_points,
+        weather=weather,
+        unmet_demands=unmet_demands
+    )
+
+    return StreamingResponse(
+        pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=comprehensive_disaster_report_{disaster_id}.pdf"
+        }
+    )
+
+
+# =========================================================
+# UNIFIED DASHBOARD API
+# =========================================================
+
+@app.get(
+    "/dashboard/{disaster_id}",
+    response_model=DashboardSummaryResponse
+)
+def get_dashboard_summary_endpoint(
+    disaster_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    summary = get_disaster_dashboard_summary(
+        db=db,
+        disaster_id=disaster_id,
+        weather_service=weather_service
+    )
+    if summary is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+    return summary
+

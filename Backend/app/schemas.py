@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Optional, List
 
 from pydantic import BaseModel, Field, ConfigDict
+
 
 
 # ============================================================
@@ -10,17 +12,17 @@ from pydantic import BaseModel, Field, ConfigDict
 class DisasterCreate(BaseModel):
     name: str
     severity: int = Field(ge=1, le=10)
-    latitude: float
-    longitude: float
-    radius_km: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
+    radius_km: float = Field(gt=0.0)
 
 
 class DisasterUpdate(BaseModel):
     name: str
     severity: int = Field(ge=1, le=10)
-    latitude: float
-    longitude: float
-    radius_km: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
+    radius_km: float = Field(gt=0.0)
 
 
 # ============================================================
@@ -29,15 +31,15 @@ class DisasterUpdate(BaseModel):
 
 class WarehouseCreate(BaseModel):
     name: str
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
     capacity: int = Field(gt=0)
 
 
 class WarehouseUpdate(BaseModel):
     name: str
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
     capacity: int = Field(gt=0)
 
 
@@ -46,8 +48,8 @@ class WarehouseUpdate(BaseModel):
 # ============================================================
 
 class PopulationCreate(BaseModel):
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
     population: int = Field(gt=0)
     vulnerable_population: int = Field(
         default=0,
@@ -90,8 +92,8 @@ class UserUpdate(BaseModel):
 
 class ShelterCreate(BaseModel):
     name: str
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
     capacity: int = Field(gt=0)
     occupancy: int = Field(default=0, ge=0)
     is_active: bool = True
@@ -99,8 +101,8 @@ class ShelterCreate(BaseModel):
 
 class ShelterUpdate(BaseModel):
     name: str
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
     capacity: int = Field(gt=0)
     occupancy: int = Field(default=0, ge=0)
     is_active: bool = True
@@ -198,3 +200,185 @@ class AllocationResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================
+# IMPACT ASSESSMENT SCHEMAS
+# ============================================================
+
+class ImpactAssessmentResponse(BaseModel):
+    id: int
+    disaster_id: int
+    affected_population: int
+    affected_buildings: int
+    affected_roads: int
+    affected_area_km2: float
+    impact_score: float
+    impact_level: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================
+# GIS SCHEMAS
+# ============================================================
+
+class NearbyShelterResponse(BaseModel):
+    id: int
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int
+    occupancy: int
+    is_active: bool
+    distance_km: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NearbyWarehouseResponse(BaseModel):
+    id: int
+    name: str
+    latitude: float
+    longitude: float
+    capacity: int
+    distance_km: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AffectedPopulationSpatialResponse(BaseModel):
+    disaster_id: int
+    total_affected_population: int
+    total_vulnerable_population: int
+    point_count: int
+    geojson: dict
+
+
+# ============================================================
+# ROUTING SCHEMAS
+# ============================================================
+
+class RouteNodeResponse(BaseModel):
+    id: int
+    name: str
+    latitude: float
+    longitude: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RouteEdgeResponse(BaseModel):
+    id: int
+    name: Optional[str] = "Road"
+    start_node_id: int
+    end_node_id: int
+    distance_km: float
+    speed_limit_kmh: float
+    travel_time_minutes: float
+    risk_score: float
+    is_blocked: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RouteRequest(BaseModel):
+    origin_node_id: int
+    destination_node_id: int
+    prefer_safe: bool = True
+    algorithm: str = Field(default="dijkstra", pattern="^(dijkstra|astar)$")
+
+
+class RouteResponse(BaseModel):
+    origin_node_id: int
+    destination_node_id: int
+    path_node_ids: List[int]
+    path_nodes: List[RouteNodeResponse]
+    distance_km: float
+    travel_time_minutes: float
+    risk_score: float
+    is_safe: bool
+    algorithm_used: str
+    explanation: str
+
+
+class RoadEdgeBlockUpdate(BaseModel):
+    is_blocked: bool
+
+
+# ============================================================
+# INTELLIGENT ALLOCATION SCHEMAS
+# ============================================================
+
+class IntelligentAllocationItem(BaseModel):
+    resource: str
+    destination_shelter_id: int
+    destination_shelter_name: str
+    warehouse_id: int
+    warehouse_name: str
+    quantity: int
+    priority_score: float
+    distance_km: float
+    risk_score: float
+    reason: str
+
+
+class UnmetDemandItem(BaseModel):
+    resource: str
+    required: int
+    allocated: int
+    unmet: int
+    reason: str
+
+
+class IntelligentAllocationResponse(BaseModel):
+    disaster_id: int
+    total_allocations_count: int
+    allocations: List[IntelligentAllocationItem]
+    unmet_demand: List[UnmetDemandItem]
+    heuristic_description: str
+    status: str
+
+
+# ============================================================
+# WEATHER SCHEMAS
+# ============================================================
+
+class NormalizedWeatherResponse(BaseModel):
+    temperature_c: float
+    rainfall_mm: float
+    wind_speed_kmh: float
+    visibility_km: float
+    weather_condition: str
+    weather_risk: float
+    source: str
+    warnings: List[str]
+
+
+# ============================================================
+# DASHBOARD SCHEMAS
+# ============================================================
+
+class DashboardSummaryResponse(BaseModel):
+    disaster: dict
+    simulation_status: str
+    impact_score: Optional[float] = None
+    impact_level: Optional[str] = None
+    affected_population: int
+    affected_buildings: int
+    affected_roads: int
+    shelter_metrics: dict
+    warehouse_metrics: dict
+    relief_requirements: dict
+    allocations_count: int
+    unmet_demand: List[UnmetDemandItem]
+    road_network: dict
+    weather: Optional[dict] = None
+    warnings: List[str]
+    overall_response_status: str
+
+
+
+
+
