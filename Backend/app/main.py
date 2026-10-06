@@ -2,6 +2,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from fastapi.responses import StreamingResponse
+from app.services.report import generate_disaster_report
 
 from app.database import engine, Base, get_db
 from app.security import hash_password, verify_password, create_access_token, decode_access_token
@@ -13,6 +15,7 @@ from app.models.simulation import SimulationResult
 from app.models.relief import ReliefRequirement
 from app.models.shelter import Shelter
 from app.models.resource import Resource
+from app.models.allocation import Allocation
 from app.services.allocation import create_allocation
 from app.utils.geo import haversine_km
 
@@ -1112,3 +1115,55 @@ def allocate_relief(
         "disaster_id": disaster_id,
         "allocation": results
     }
+
+@app.get("/reports/{disaster_id}")
+def generate_report(
+    disaster_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    disaster = db.query(Disaster).filter(
+        Disaster.id == disaster_id
+    ).first()
+
+    if not disaster:
+        raise HTTPException(
+            status_code=404,
+            detail="Disaster not found"
+        )
+
+    simulation = db.query(SimulationResult).filter(
+        SimulationResult.disaster_id == disaster_id
+    ).order_by(SimulationResult.id.desc()).first()
+
+    relief = db.query(ReliefRequirement).filter(
+        ReliefRequirement.disaster_id == disaster_id
+    ).order_by(ReliefRequirement.id.desc()).first()
+
+    allocations = db.query(Allocation).filter(
+        Allocation.disaster_id == disaster_id
+    ).all()
+
+    resources = db.query(Resource).all()
+
+    shelters = db.query(Shelter).all()
+
+    population_points = db.query(PopulationPoint).all()
+
+    pdf = generate_disaster_report(
+        disaster,
+        simulation,
+        relief,
+        allocations,
+        resources,
+        shelters,
+        population_points
+    )
+
+    return StreamingResponse(
+        pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=disaster_report_{disaster_id}.pdf"
+        }
+    )
