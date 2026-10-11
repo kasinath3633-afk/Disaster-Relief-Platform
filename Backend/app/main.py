@@ -753,7 +753,7 @@ def run_simulation(
             point.longitude
         )
 
-        if distance <= disaster.radius_km:
+        if distance <= (disaster.radius_km + 0.05):
             affected_population += point.population
 
     # Area of the circular disaster zone
