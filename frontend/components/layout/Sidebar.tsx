@@ -1,5 +1,5 @@
 "use client";
-
+import { BrandLogo } from "./BrandLogo";
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -32,17 +32,38 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col shrink-0 h-screen sticky top-0 select-none">
-      {/* Brand Header */}
+      
+    {/* Brand Header */}
+    <div className="min-h-20 px-4 flex items-center gap-3 border-b border-slate-800 bg-slate-900/50">
+      <div className="p-2 bg-cyan-500/10 border border-cyan-400/20 rounded-xl shadow-sm shadow-cyan-950/50">
+        <BrandLogo />
+      </div>
+
+      <div className="min-w-0">
+        <h1 className="text-sm font-extrabold tracking-wide text-slate-100 uppercase whitespace-nowrap">
+          DMS <span className="text-cyan-400">System</span>
+        </h1>
+
+        <p className="mt-1 text-[9px] font-medium text-slate-400 tracking-wider uppercase">
+          Disaster Relief Platform
+        </p>
+
+        <p className="mt-1 text-[10px] text-cyan-400 font-mono tracking-widest uppercase">
+          By Team Nexus
+        </p>
+      </div>
+    </div>
+
       <div className="h-16 px-5 flex items-center gap-3 border-b border-slate-800 bg-slate-900/50">
         <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400">
           <ShieldAlert className="w-5 h-5" />
         </div>
         <div>
           <h1 className="text-sm font-bold tracking-wider text-slate-100 uppercase">
-            Disaster Center
+            DMS System
           </h1>
           <span className="text-[10px] text-cyan-400 font-mono tracking-widest uppercase">
-            AI Tactical Engine
+            By Team Nexus
           </span>
         </div>
       </div>
