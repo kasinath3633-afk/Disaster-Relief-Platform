@@ -21,6 +21,7 @@ from app.services.routing import (
     dijkstra_safe_path,
     astar_safe_path,
     seed_sample_road_network,
+    sync_shelters_to_road_nodes,
 )
 from app.services.intelligent_allocation import (
     calculate_destination_priority,
@@ -60,6 +61,7 @@ __all__ = [
     "dijkstra_safe_path",
     "astar_safe_path",
     "seed_sample_road_network",
+    "sync_shelters_to_road_nodes",
     "calculate_destination_priority",
     "rank_candidate_warehouses",
     "run_intelligent_allocation_heuristic",

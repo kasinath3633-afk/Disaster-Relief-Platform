@@ -10,10 +10,11 @@ import {
   Polyline,
   GeoJSON,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Shelter, Warehouse, RouteNode, RouteEdge } from "@/types/api";
+import { Shelter, Warehouse, RouteNode, RouteEdge, PopulationPoint } from "@/types/api";
 import { formatNumber } from "@/lib/utils";
 
 // Custom tactical DivIcons
@@ -38,14 +39,25 @@ const disasterIcon = createDivIcon("#ef4444", "⚠", true);
 const shelterIcon = createDivIcon("#38bdf8", "S");
 const warehouseIcon = createDivIcon("#10b981", "W");
 const roadNodeIcon = createDivIcon("#94a3b8", "•");
-const originNodeIcon = createDivIcon("#a855f7", "A");
-const destNodeIcon = createDivIcon("#ec4899", "B");
+const originNodeIcon = createDivIcon("#a855f7", "A", true);
+const destNodeIcon = createDivIcon("#ec4899", "B", true);
 
 function RecenterMap({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
   useEffect(() => {
     map.setView(center, zoom);
   }, [center, zoom, map]);
+  return null;
+}
+
+function MapClickHandler({ onMapClick }: { onMapClick?: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) {
+      if (onMapClick) {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      }
+    },
+  });
   return null;
 }
 
@@ -63,6 +75,7 @@ export interface MapProps {
   shelters?: Shelter[];
   warehouses?: Warehouse[];
   populationGeoJson?: any;
+  populationPoints?: PopulationPoint[];
   roadNodes?: RouteNode[];
   roadEdges?: RouteEdge[];
   routePath?: RouteNode[];
@@ -73,6 +86,9 @@ export interface MapProps {
   showWarehouses?: boolean;
   showRoads?: boolean;
   showRoute?: boolean;
+  onSelectOrigin?: (nodeId: number) => void;
+  onSelectDestination?: (nodeId: number) => void;
+  onMapClick?: (lat: number, lng: number) => void;
 }
 
 export default function LeafletMapInner({
@@ -83,6 +99,7 @@ export default function LeafletMapInner({
   shelters = [],
   warehouses = [],
   populationGeoJson,
+  populationPoints = [],
   roadNodes = [],
   roadEdges = [],
   routePath = [],
@@ -93,14 +110,29 @@ export default function LeafletMapInner({
   showWarehouses = true,
   showRoads = true,
   showRoute = true,
+  onSelectOrigin,
+  onSelectDestination,
+  onMapClick,
 }: MapProps) {
-  const mapCenter: [number, number] = disaster
-    ? [disaster.latitude, disaster.longitude]
-    : center;
-
-  // Build node lookup map for road edges
+  // Build node lookup map for road edges and quick lookups
   const nodeMap = new Map<number, RouteNode>();
   roadNodes.forEach((n) => nodeMap.set(n.id, n));
+
+  const selectedOriginNode = originNodeId ? nodeMap.get(originNodeId) : null;
+  const selectedDestNode = destNodeId ? nodeMap.get(destNodeId) : null;
+
+  // Determine ideal initial center
+  const mapCenter: [number, number] = routePath.length > 0
+    ? [routePath[0].latitude, routePath[0].longitude]
+    : selectedDestNode
+    ? [selectedDestNode.latitude, selectedDestNode.longitude]
+    : selectedOriginNode
+    ? [selectedOriginNode.latitude, selectedOriginNode.longitude]
+    : disaster
+    ? [disaster.latitude, disaster.longitude]
+    : shelters.length > 0
+    ? [shelters[0].latitude, shelters[0].longitude]
+    : center;
 
   return (
     <div style={{ height, width: "100%" }} className="relative rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
@@ -111,8 +143,9 @@ export default function LeafletMapInner({
         style={{ height: "100%", width: "100%" }}
       >
         <RecenterMap center={mapCenter} zoom={zoom} />
+        {onMapClick && <MapClickHandler onMapClick={onMapClick} />}
 
-        {/* OpenStreetMap Dark / Standard CartoDB Dark Matter */}
+        {/* Base Cartographic Layer */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -182,6 +215,42 @@ export default function LeafletMapInner({
           />
         )}
 
+        {/* 2B. DIRECT POPULATION POINTS LAYER */}
+        {showPopulation && populationPoints && populationPoints.length > 0 &&
+          populationPoints.map((pt) => {
+            const vulnRatio = pt.population > 0 ? pt.vulnerable_population / pt.population : 0;
+            const color = vulnRatio > 0.3 ? "#ef4444" : vulnRatio > 0.15 ? "#f97316" : "#eab308";
+
+            return (
+              <Circle
+                key={`pop-pt-${pt.id}`}
+                center={[pt.latitude, pt.longitude]}
+                radius={Math.min(3000, Math.max(600, pt.population * 0.25))}
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: 0.35,
+                  weight: 1.5,
+                }}
+              >
+                <Popup>
+                  <div className="p-2 space-y-1 text-xs text-slate-100">
+                    <strong className="text-amber-400 font-bold block">
+                      Demographic Census Point #{pt.id}
+                    </strong>
+                    <div>Total Population: <b>{formatNumber(pt.population)}</b></div>
+                    <div>
+                      Vulnerable: <b>{formatNumber(pt.vulnerable_population)}</b> ({Math.round(vulnRatio * 100)}%)
+                    </div>
+                    <div className="font-mono text-[10px] text-slate-400 mt-1">
+                      {pt.latitude.toFixed(4)}°, {pt.longitude.toFixed(4)}°
+                    </div>
+                  </div>
+                </Popup>
+              </Circle>
+            );
+          })}
+
         {/* 3. ROAD NETWORK (EDGES) */}
         {showRoads &&
           roadEdges.map((edge) => {
@@ -229,18 +298,46 @@ export default function LeafletMapInner({
         {/* 4. ROAD NODES */}
         {showRoads &&
           roadNodes.map((node) => {
-            let icon = roadNodeIcon;
+            const isShelter = node.name.toLowerCase().startsWith("shelter");
+            let icon = isShelter ? shelterIcon : roadNodeIcon;
             if (node.id === originNodeId) icon = originNodeIcon;
             else if (node.id === destNodeId) icon = destNodeIcon;
 
             return (
               <Marker key={`node-${node.id}`} position={[node.latitude, node.longitude]} icon={icon}>
                 <Popup>
-                  <div className="p-2 text-xs text-slate-100">
-                    <strong className="text-cyan-400">{node.name}</strong> (Node #{node.id})
-                    <div className="font-mono text-[11px] text-slate-400 mt-0.5">
+                  <div className="p-2 text-xs text-slate-100 space-y-2">
+                    <div>
+                      <strong className={isShelter ? "text-cyan-400 font-bold" : "text-slate-200"}>
+                        {node.name}
+                      </strong>
+                      <span className="text-slate-400 font-mono text-[10px] ml-1">#{node.id}</span>
+                    </div>
+                    <div className="font-mono text-[10px] text-slate-400">
                       {node.latitude.toFixed(4)}°, {node.longitude.toFixed(4)}°
                     </div>
+                    {(onSelectOrigin || onSelectDestination) && (
+                      <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-700/80">
+                        {onSelectOrigin && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectOrigin(node.id)}
+                            className="px-2 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 rounded text-[10px] font-mono font-bold transition-colors"
+                          >
+                            Set Origin (A)
+                          </button>
+                        )}
+                        {onSelectDestination && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectDestination(node.id)}
+                            className="px-2 py-1 bg-pink-600/30 hover:bg-pink-600/50 text-pink-200 border border-pink-500/40 rounded text-[10px] font-mono font-bold transition-colors"
+                          >
+                            Set Dest (B)
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </Popup>
               </Marker>
@@ -254,31 +351,45 @@ export default function LeafletMapInner({
             pathOptions={{
               color: "#38bdf8",
               weight: 5,
-              opacity: 0.9,
+              opacity: 0.95,
               lineCap: "round",
               lineJoin: "round",
             }}
           />
         )}
 
-        {/* 6. SHELTER MARKERS */}
+        {/* 6. REGISTERED SHELTER MARKERS (Visible across all maps) */}
         {showShelters &&
           shelters.map((shelter) => {
             const avail = Math.max(0, shelter.capacity - shelter.occupancy);
             const isFull = shelter.occupancy >= shelter.capacity;
 
+            // Find matching road node if any
+            const matchingNode = roadNodes.find(
+              (n) =>
+                n.name.toLowerCase().includes(shelter.name.toLowerCase()) ||
+                (Math.abs(n.latitude - shelter.latitude) < 0.0005 &&
+                  Math.abs(n.longitude - shelter.longitude) < 0.0005)
+            );
+
+            let markerIcon = shelterIcon;
+            if (matchingNode) {
+              if (matchingNode.id === originNodeId) markerIcon = originNodeIcon;
+              else if (matchingNode.id === destNodeId) markerIcon = destNodeIcon;
+            }
+
             return (
               <Marker
                 key={`shelter-${shelter.id}`}
                 position={[shelter.latitude, shelter.longitude]}
-                icon={shelterIcon}
+                icon={markerIcon}
               >
                 <Popup>
                   <div className="p-2 space-y-1.5 text-xs text-slate-100">
                     <div className="font-bold text-cyan-400 flex items-center justify-between gap-2">
                       <span>{shelter.name}</span>
-                      <span className="text-[10px] px-1.5 py-0.2 bg-cyan-950 border border-cyan-800 rounded">
-                        Shelter
+                      <span className="text-[10px] px-1.5 py-0.2 bg-cyan-950 border border-cyan-800 rounded font-mono">
+                        Shelter #{shelter.id}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -291,9 +402,30 @@ export default function LeafletMapInner({
                         {formatNumber(avail)} {isFull ? "(AT CAPACITY)" : ""}
                       </span>
                     </div>
-                    {shelter.distance_km !== undefined && (
-                      <div className="text-[11px] text-slate-400">
-                        Proximity: {shelter.distance_km.toFixed(2)} km
+                    <div className="font-mono text-[10px] text-slate-400">
+                      {shelter.latitude.toFixed(4)}°, {shelter.longitude.toFixed(4)}°
+                    </div>
+
+                    {(onSelectOrigin || onSelectDestination) && matchingNode && (
+                      <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-700/80">
+                        {onSelectOrigin && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectOrigin(matchingNode.id)}
+                            className="px-2 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 rounded text-[10px] font-mono font-bold transition-colors"
+                          >
+                            Set Origin (A)
+                          </button>
+                        )}
+                        {onSelectDestination && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectDestination(matchingNode.id)}
+                            className="px-2 py-1 bg-pink-600/30 hover:bg-pink-600/50 text-pink-200 border border-pink-500/40 rounded text-[10px] font-mono font-bold transition-colors"
+                          >
+                            Set Dest (B)
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -314,8 +446,8 @@ export default function LeafletMapInner({
                 <div className="p-2 space-y-1.5 text-xs text-slate-100">
                   <div className="font-bold text-emerald-400 flex items-center justify-between gap-2">
                     <span>{wh.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 bg-emerald-950 border border-emerald-800 rounded">
-                      Logistics Depot
+                    <span className="text-[10px] px-1.5 py-0.2 bg-emerald-950 border border-emerald-800 rounded font-mono">
+                      Depot #{wh.id}
                     </span>
                   </div>
                   <div>Storage Capacity: <b>{formatNumber(wh.capacity)} units</b></div>

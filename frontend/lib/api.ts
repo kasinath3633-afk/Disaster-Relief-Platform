@@ -18,6 +18,8 @@ import {
   SimulationResult,
   ImpactAssessment,
   ReliefRequirement,
+  PopulationPoint,
+  PopulationCreate,
   NearbyShelter,
   NearbyWarehouse,
   AffectedPopulationSpatial,
@@ -224,6 +226,27 @@ export async function runIntelligentAllocation(
 }
 
 // ==========================================
+// POPULATION APIs
+// ==========================================
+
+export async function getPopulationPoints(): Promise<PopulationPoint[]> {
+  return request<PopulationPoint[]>("/population");
+}
+
+export async function createPopulationPoint(data: PopulationCreate): Promise<PopulationPoint> {
+  return request<PopulationPoint>("/population", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePopulationPoint(id: number): Promise<{ message: string }> {
+  return request<{ message: string }>(`/population/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// ==========================================
 // SHELTERS APIs
 // ==========================================
 
@@ -321,6 +344,12 @@ export async function getAffectedPopulationSpatial(
 
 export async function seedRoadNetwork(): Promise<{ message: string; nodes_count: number; edges_count: number }> {
   return request<{ message: string; nodes_count: number; edges_count: number }>("/routing/seed-network", {
+    method: "POST",
+  });
+}
+
+export async function syncSheltersToRoads(): Promise<{ synced_nodes: number; synced_edges: number; total_nodes: number }> {
+  return request<{ synced_nodes: number; synced_edges: number; total_nodes: number }>("/routing/sync-shelters", {
     method: "POST",
   });
 }

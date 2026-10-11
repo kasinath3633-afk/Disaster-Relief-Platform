@@ -12,12 +12,14 @@ import {
   Scale,
   FileText,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { label: "Command Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Disaster Zones", href: "/disasters", icon: Flame },
+  { label: "Population Census", href: "/population", icon: Users },
   { label: "Shelter Network", href: "/shelters", icon: Home },
   { label: "Depots & Warehouses", href: "/warehouses", icon: Boxes },
   { label: "Safe Routing & Roads", href: "/routing", icon: Navigation },

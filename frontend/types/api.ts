@@ -121,6 +121,21 @@ export interface ResourceCreate {
   unit: string;
 }
 
+export interface PopulationPoint {
+  id: number;
+  latitude: number;
+  longitude: number;
+  population: number;
+  vulnerable_population: number;
+}
+
+export interface PopulationCreate {
+  latitude: number;
+  longitude: number;
+  population: number;
+  vulnerable_population?: number;
+}
+
 export interface SimulationResult {
   id: number;
   disaster_id: number;

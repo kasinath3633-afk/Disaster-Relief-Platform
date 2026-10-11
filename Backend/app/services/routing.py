@@ -3,7 +3,9 @@ from typing import Dict, List, Optional, Tuple, Any
 from sqlalchemy.orm import Session
 
 from app.models.routing import RoadNode, RoadEdge
+from app.models.shelter import Shelter
 from app.utils.geo import haversine_km
+
 
 
 class RoutingGraph:
@@ -344,3 +346,87 @@ def seed_sample_road_network(db: Session) -> Dict[str, int]:
     db.commit()
 
     return {"nodes": len(nodes), "edges": len(edges), "seeded": True}
+
+
+def sync_shelters_to_road_nodes(db: Session) -> Dict[str, Any]:
+    """
+    Synchronize all registered shelters into the topological road network.
+    Ensures every registered shelter has a corresponding RoadNode and is connected
+    to the topological graph via a bidirectional RoadEdge to the nearest node.
+    This guarantees full reachability for Dijkstra and A* multi-criteria routing.
+    """
+    # 1. Ensure the base seed network is present first so there are backbone hubs to connect to
+    if db.query(RoadNode).count() == 0:
+        seed_sample_road_network(db)
+
+    existing_nodes = db.query(RoadNode).all()
+    if not existing_nodes:
+        return {"synced_nodes": 0, "synced_edges": 0, "total_nodes": 0}
+
+    active_nodes = list(existing_nodes)
+    shelters = db.query(Shelter).all()
+    if not shelters:
+        return {"synced_nodes": 0, "synced_edges": 0, "total_nodes": len(active_nodes)}
+
+    synced_nodes_count = 0
+    synced_edges_count = 0
+
+    for s in shelters:
+        clean_name = s.name.strip()
+        node_name = clean_name if clean_name.lower().startswith("shelter") else f"Shelter: {clean_name}"
+        node_name = node_name[:95]
+
+        # Check if already synced by name or identical coordinates
+        already_synced = any(
+            n.name.lower() == node_name.lower()
+            or (abs(n.latitude - s.latitude) < 0.0001 and abs(n.longitude - s.longitude) < 0.0001)
+            for n in active_nodes
+        )
+        if already_synced:
+            continue
+
+        # Find closest existing node in active_nodes
+        best_node = min(
+            active_nodes,
+            key=lambda n: haversine_km(s.latitude, s.longitude, n.latitude, n.longitude)
+        )
+
+        dist_km = haversine_km(s.latitude, s.longitude, best_node.latitude, best_node.longitude)
+        edge_distance = max(0.1, round(dist_km, 2))
+        speed_limit = 40.0
+        travel_time = max(0.2, round((edge_distance / speed_limit) * 60.0, 1))
+        risk = 0.05
+
+        new_node = RoadNode(
+            name=node_name,
+            latitude=s.latitude,
+            longitude=s.longitude
+        )
+        db.add(new_node)
+        db.flush()
+
+        edge_label = f"Access: {clean_name}"[:95]
+        new_edge = RoadEdge(
+            name=edge_label,
+            start_node_id=best_node.id,
+            end_node_id=new_node.id,
+            distance_km=edge_distance,
+            speed_limit_kmh=speed_limit,
+            travel_time_minutes=travel_time,
+            risk_score=risk,
+            is_blocked=False
+        )
+        db.add(new_edge)
+        active_nodes.append(new_node)
+        synced_nodes_count += 1
+        synced_edges_count += 1
+
+    if synced_nodes_count > 0:
+        db.commit()
+
+    return {
+        "synced_nodes": synced_nodes_count,
+        "synced_edges": synced_edges_count,
+        "total_nodes": len(active_nodes)
+    }
+

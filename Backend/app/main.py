@@ -31,7 +31,8 @@ from app.services.routing import (
     RoutingGraph,
     dijkstra_safe_path,
     astar_safe_path,
-    seed_sample_road_network
+    seed_sample_road_network,
+    sync_shelters_to_road_nodes
 )
 from app.services.intelligent_allocation import run_intelligent_allocation_heuristic
 from app.services.external_data import ResilientWeatherService, get_weather_adjusted_impact_score
@@ -593,6 +594,21 @@ def get_population(
     return population_points
 
 
+@app.delete("/population/{population_id}")
+def delete_population(
+    population_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    point = db.query(PopulationPoint).filter(PopulationPoint.id == population_id).first()
+    if point is None:
+        raise HTTPException(status_code=404, detail="Population point not found")
+    db.delete(point)
+    db.commit()
+    return {"message": "Population point deleted successfully"}
+
+
+
 # =========================================================
 # USER APIs
 # =========================================================
@@ -883,6 +899,9 @@ def create_shelter(
     db.commit()
     db.refresh(new_shelter)
 
+    if db.query(RoadNode).count() > 0:
+        sync_shelters_to_road_nodes(db)
+
     return new_shelter
 
 
@@ -1080,6 +1099,20 @@ def seed_road_network_endpoint(
     current_user: User = Depends(get_current_user)
 ):
     result = seed_sample_road_network(db)
+    sync_res = sync_shelters_to_road_nodes(db)
+    result["synced_shelters"] = sync_res["synced_nodes"]
+    return result
+
+
+@app.post(
+    "/routing/sync-shelters",
+    response_model=dict
+)
+def sync_shelters_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = sync_shelters_to_road_nodes(db)
     return result
 
 
@@ -1091,7 +1124,8 @@ def get_road_nodes_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    nodes = db.query(RoadNode).all()
+    sync_shelters_to_road_nodes(db)
+    nodes = db.query(RoadNode).order_by(RoadNode.id.asc()).all()
     return nodes
 
 
