@@ -143,3 +143,5 @@ Detailed verification reports, algorithms, schemas, and test outputs for each de
 - [`README_Day14_Completion.md`](file:///c:/Users/jishn/OneDrive/Documents/Disaster%20Management%20System/Backend/README_Day14_Completion.md): Intelligent Relief Allocation & Unmet Demand
 - [`README_Day15_Completion.md`](file:///c:/Users/jishn/OneDrive/Documents/Disaster%20Management%20System/Backend/README_Day15_Completion.md): External Data Integration & Comprehensive Reporting
 - [`README_Day16_Completion.md`](file:///c:/Users/jishn/OneDrive/Documents/Disaster%20Management%20System/Backend/README_Day16_Completion.md): Unified Dashboard API & Final End-to-End Verification
+- [`README_DASHBOARD_FUNCTIONS.md`](file:///c:/Users/jishn/OneDrive/Documents/Disaster%20Management%20System/Backend/README_DASHBOARD_FUNCTIONS.md): Dashboard Operations Guide (Simulate, Assess Impact, Estimate Relief)
+

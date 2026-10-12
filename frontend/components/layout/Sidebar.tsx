@@ -54,19 +54,7 @@ export function Sidebar() {
       </div>
     </div>
 
-      <div className="h-16 px-5 flex items-center gap-3 border-b border-slate-800 bg-slate-900/50">
-        <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400">
-          <ShieldAlert className="w-5 h-5" />
-        </div>
-        <div>
-          <h1 className="text-sm font-bold tracking-wider text-slate-100 uppercase">
-            DMS System
-          </h1>
-          <span className="text-[10px] text-cyan-400 font-mono tracking-widest uppercase">
-            By Team Nexus
-          </span>
-        </div>
-      </div>
+
 
       {/* Navigation Links */}
       <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
